@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/TelegramNasaBot/appsettings.Development.json
+/TelegramNasaBot/Properties/appsettings.Production.json
+/TelegramNasaBot/Properties/launchSettings.json
+/TelegramNasaBot/appsettings.Production.json
