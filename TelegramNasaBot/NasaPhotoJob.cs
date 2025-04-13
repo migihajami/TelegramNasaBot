@@ -1,6 +1,7 @@
 ﻿using Quartz;
 using Serilog;
 using System;
+using System.Globalization;
 using System.Threading.Tasks;
 
 namespace TelegramNasaBot
@@ -37,10 +38,10 @@ namespace TelegramNasaBot
                 var (url, imageData) = await _photoFetcher.FetchNasaPhotoAsync();
 
                 // Add QR code
-                var modifiedImage = await _qrCodeGenerator.AddQrCodeToImageAsync(imageData, $"https://t.me/{_telegramSettings.ChannelId.Remove(0, 1)}");
+                var modifiedImage = await _qrCodeGenerator.AddQrCodeToImageAsync(imageData, _telegramSettings.QrCodeText);
 
                 // Publish to Telegram
-                var caption = $"NASA Astronomy Picture of the Day: {url}";
+                var caption = $"NASA Astronomy Picture of the Day {DateTime.Today.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture)}";
                 await _publisher.PublishPhotoAsync(modifiedImage, caption);
 
                 _logger.Information("Daily NASA photo job completed successfully.");
