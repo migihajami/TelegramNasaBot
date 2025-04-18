@@ -1,4 +1,4 @@
-﻿namespace TelegramNasaBot
+﻿namespace TelegramNasaBot.Models
 {
     public class NasaSettings
     {

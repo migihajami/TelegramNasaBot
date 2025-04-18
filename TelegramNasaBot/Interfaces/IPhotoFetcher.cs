@@ -1,4 +1,4 @@
-﻿namespace TelegramNasaBot
+﻿namespace TelegramNasaBot.Interfaces
 {
     public interface IPhotoFetcher
         {

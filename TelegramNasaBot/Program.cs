@@ -6,6 +6,9 @@ using Quartz.Spi;
 using Serilog;
 using System;
 using Telegram.Bot;
+using TelegramNasaBot.Interfaces;
+using TelegramNasaBot.Models;
+using TelegramNasaBot.Services;
 
 namespace TelegramNasaBot
 {

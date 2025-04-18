@@ -8,8 +8,10 @@ using SixLabors.ImageSharp.Processing;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using TelegramNasaBot.Interfaces;
+using TelegramNasaBot.Models;
 
-namespace TelegramNasaBot
+namespace TelegramNasaBot.Services
 {
     public class QrCodeGenerator : IQrCodeGenerator
     {

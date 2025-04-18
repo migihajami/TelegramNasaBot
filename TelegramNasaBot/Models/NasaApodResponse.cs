@@ -1,4 +1,4 @@
-﻿namespace TelegramNasaBot
+﻿namespace TelegramNasaBot.Models
 {
     // NASA APOD API response model
     public class NasaApodResponse

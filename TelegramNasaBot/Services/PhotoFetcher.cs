@@ -1,8 +1,10 @@
 ﻿using Microsoft.Extensions.Options;
 using Serilog;
 using System.Net.Http.Json;
+using TelegramNasaBot.Interfaces;
+using TelegramNasaBot.Models;
 
-namespace TelegramNasaBot
+namespace TelegramNasaBot.Services
 {
     public class PhotoFetcher : IPhotoFetcher
     {
