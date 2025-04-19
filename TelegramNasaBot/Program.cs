@@ -53,8 +53,8 @@ namespace TelegramNasaBot
                 // Define the trigger (daily at 12:10 GMT)
                 var trigger = TriggerBuilder.Create()
                     .WithIdentity("NasaPhotoTrigger", "NasaGroup")
-                    //.WithCronSchedule("0 10 12 * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // 12:10 UTC
-                    .WithCronSchedule("0 * * * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // Uncomment for testing every minute
+                    .WithCronSchedule("0 10 12 * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // 12:10 UTC
+                    //.WithCronSchedule("0 * * * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // Uncomment for testing every minute
                     .Build();
 
                 // Schedule the job
