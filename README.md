@@ -48,4 +48,4 @@ dotnet run
 The bot fetches NASA's APOD, translates it, and posts to Telegram daily at 12:10 UTC.
 
 ## License
-MIT License.
+Apache 2 License.
