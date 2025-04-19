@@ -1,10 +1,12 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Quartz;
 using Quartz.Impl;
 using Quartz.Spi;
 using Serilog;
 using System;
+using System.Net;
 using Telegram.Bot;
 using TelegramNasaBot.Interfaces;
 using TelegramNasaBot.Models;
@@ -51,8 +53,8 @@ namespace TelegramNasaBot
                 // Define the trigger (daily at 12:10 GMT)
                 var trigger = TriggerBuilder.Create()
                     .WithIdentity("NasaPhotoTrigger", "NasaGroup")
-                    .WithCronSchedule("0 10 12 * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // 12:10 UTC
-                    //.WithCronSchedule("0 * * * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // Uncomment for testing every minute
+                    //.WithCronSchedule("0 10 12 * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // 12:10 UTC
+                    .WithCronSchedule("0 * * * * ?", x => x.InTimeZone(TimeZoneInfo.Utc)) // Uncomment for testing every minute
                     .Build();
 
                 // Schedule the job
@@ -80,12 +82,37 @@ namespace TelegramNasaBot
             // Add configurations
             services.Configure<TelegramSettings>(configuration.GetSection("Telegram"));
             services.Configure<NasaSettings>(configuration.GetSection("Nasa"));
+            services.Configure<OpenAiSettings>(configuration.GetSection("OpenAi"));
+            services.Configure<ProxySettings>(configuration.GetSection("Proxy"));
             services.AddSingleton(configuration.GetSection("Telegram").Get<TelegramSettings>());
 
+            // Add HTTP clients
+            services.AddHttpClient<IPhotoFetcher, PhotoFetcher>(); // NASA API client without proxy
+            services.AddHttpClient("OpenAiClient") // OpenAI client with conditional proxy
+                .ConfigurePrimaryHttpMessageHandler(sp =>
+                {
+                    var proxySettings = sp.GetRequiredService<IOptions<ProxySettings>>().Value;
+                    var handler = new HttpClientHandler();
+
+                    if (proxySettings.UseProxy && !string.IsNullOrEmpty(proxySettings.ProxyAddress))
+                    {
+                        handler.Proxy = new WebProxy(proxySettings.ProxyAddress);
+                        handler.UseProxy = true;
+                        Log.Information("Using proxy for OpenAI client: {ProxyAddress}", proxySettings.ProxyAddress);
+                    }
+                    else
+                    {
+                        handler.UseProxy = false;
+                        Log.Information("Bypassing proxy for OpenAI client.");
+                    }
+
+                    return handler;
+                });
+
             // Add services
-            services.AddHttpClient<IPhotoFetcher, PhotoFetcher>();
             services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
             services.AddSingleton<IPublisher, Publisher>();
+            services.AddSingleton<ITranslationService, OpenAiTranslationService>();
             services.AddSingleton<ILogger>(Log.Logger);
             services.AddSingleton<ITelegramBotClient>(sp =>
                 new TelegramBotClient(configuration.GetSection("Telegram:BotToken").Value));

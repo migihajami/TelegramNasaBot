@@ -1,8 +1,10 @@
-﻿namespace TelegramNasaBot.Interfaces
+﻿using TelegramNasaBot.Models;
+
+namespace TelegramNasaBot.Interfaces
 {
     public interface IPhotoFetcher
         {
-            Task<(string Url, byte[] ImageData)> FetchNasaPhotoAsync();
-        }
+        Task<NasaPhotoData> FetchNasaPhotoAsync();
+    }
     
 }

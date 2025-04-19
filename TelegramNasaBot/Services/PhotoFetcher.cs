@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Options;
 using Serilog;
-using System.Net.Http.Json;
+using System.Text.Json;
 using TelegramNasaBot.Interfaces;
 using TelegramNasaBot.Models;
 
@@ -9,43 +9,56 @@ namespace TelegramNasaBot.Services
     public class PhotoFetcher : IPhotoFetcher
     {
         private readonly HttpClient _httpClient;
-        private readonly NasaSettings _nasaSettings;
+        private readonly NasaSettings _settings;
         private readonly ILogger _logger;
 
-        public PhotoFetcher(HttpClient httpClient, IOptions<NasaSettings> nasaSettings, ILogger logger)
+        public PhotoFetcher(
+            HttpClient httpClient,
+            IOptions<NasaSettings> settings,
+            ILogger logger)
         {
             _httpClient = httpClient;
-            _nasaSettings = nasaSettings.Value;
+            _settings = settings.Value;
             _logger = logger;
         }
 
-        public async Task<(string Url, byte[] ImageData)> FetchNasaPhotoAsync()
+        public async Task<NasaPhotoData> FetchNasaPhotoAsync()
         {
+            _logger.Information("Fetching NASA photo of the day.");
+
             try
             {
-                _logger.Information("Fetching NASA Astronomy Picture of the Day...");
+                var response = await _httpClient.GetAsync(
+                    $"{_settings.ApiUrl}?api_key={_settings.ApiKey}");
 
-                // Call NASA APOD API
-                var url = $"{_nasaSettings.ApiUrl}?api_key={_nasaSettings.ApiKey}";
-                var response = await _httpClient.GetFromJsonAsync<NasaApodResponse>(url);
+                response.EnsureSuccessStatusCode();
 
-                if (response == null || string.IsNullOrEmpty(response.HdUrl))
+                var json = await response.Content.ReadAsStringAsync();
+                using var document = JsonDocument.Parse(json);
+
+                var root = document.RootElement;
+                var url = root.GetProperty("url").GetString() ?? string.Empty;
+                var title = root.GetProperty("title").GetString() ?? string.Empty;
+                var explanation = root.GetProperty("explanation").GetString() ?? string.Empty;
+
+                _logger.Information("Downloading NASA photo from {Url}", url);
+                var imageResponse = await _httpClient.GetAsync(url);
+                imageResponse.EnsureSuccessStatusCode();
+
+                var imageData = await imageResponse.Content.ReadAsByteArrayAsync();
+
+                _logger.Information("NASA photo fetched successfully.");
+                return new NasaPhotoData
                 {
-                    _logger.Error("Failed to retrieve valid NASA APOD data.");
-                    throw new Exception("No valid photo data returned from NASA API.");
-                }
-
-                _logger.Information("NASA photo URL retrieved: {Url}", response.HdUrl);
-
-                // Download the image
-                var imageData = await _httpClient.GetByteArrayAsync(response.HdUrl);
-                _logger.Information("NASA photo downloaded successfully, size: {Size} bytes", imageData.Length);
-
-                return (response.HdUrl, imageData);
+                    Url = url,
+                    ImageData = imageData,
+                    Title = title,
+                    Explanation = explanation
+                };
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error fetching NASA photo.");
+                _logger.Error(ex, "Failed to fetch NASA photo.");
                 throw;
             }
         }

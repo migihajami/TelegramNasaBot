@@ -10,48 +10,83 @@ namespace TelegramNasaBot.Services
 {
     public class NasaPhotoJob : IJob
     {
+        private const int TELEGRAM_CAPTION_LIMIT = 1024;
+        private const string TRUNCATION_SUFFIX = "...";
+
         private readonly IPhotoFetcher _photoFetcher;
         private readonly IQrCodeGenerator _qrCodeGenerator;
         private readonly IPublisher _publisher;
-        private readonly TelegramSettings _telegramSettings;
+        private readonly ITranslationService _translationService;
         private readonly ILogger _logger;
+        private readonly TelegramSettings _telegramSettings;
 
         public NasaPhotoJob(
             IPhotoFetcher photoFetcher,
             IQrCodeGenerator qrCodeGenerator,
             IPublisher publisher,
-            TelegramSettings telegramSettings,
-            ILogger logger)
+            ITranslationService translationService,
+            ILogger logger,
+            TelegramSettings telegramSettings)
         {
             _photoFetcher = photoFetcher;
             _qrCodeGenerator = qrCodeGenerator;
             _publisher = publisher;
-            _telegramSettings = telegramSettings;
+            _translationService = translationService;
             _logger = logger;
+            _telegramSettings = telegramSettings;
         }
 
         public async Task Execute(IJobExecutionContext context)
         {
+            _logger.Information("Starting NASA photo job execution.");
+
             try
             {
-                _logger.Information("Starting daily NASA photo posting job...");
+                var photoData = await _photoFetcher.FetchNasaPhotoAsync();
+                var imageWithQrCode = await _qrCodeGenerator.AddQrCodeToImageAsync(
+                    photoData.ImageData,
+                    _telegramSettings.ChannelId);
 
-                // Fetch photo
-                var (url, imageData) = await _photoFetcher.FetchNasaPhotoAsync();
+                var caption = await PrepareCaptionAsync(photoData);
 
-                // Add QR code
-                var modifiedImage = await _qrCodeGenerator.AddQrCodeToImageAsync(imageData, _telegramSettings.QrCodeText);
+                await _publisher.PublishPhotoAsync(imageWithQrCode, caption);
 
-                // Publish to Telegram
-                var caption = $"NASA Astronomy Picture of the Day {DateTime.Today.ToString("dd.MM.yyyy", CultureInfo.InvariantCulture)}";
-                await _publisher.PublishPhotoAsync(modifiedImage, caption);
-
-                _logger.Information("Daily NASA photo job completed successfully.");
+                _logger.Information("NASA photo job completed successfully.");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error in daily NASA photo job.");
+                _logger.Error(ex, "NASA photo job failed.");
                 throw new JobExecutionException(ex);
+            }
+        }
+
+        // Prepares the caption by translating title and explanation or using fallback
+        private async Task<string> PrepareCaptionAsync(NasaPhotoData photoData)
+        {
+            var originalText = $"{photoData.Title}\n\n{photoData.Explanation}";
+
+            try
+            {
+                var translatedText = await _translationService.TranslateToLanguageAsync(originalText, "ru");
+
+                // Check if translated text exceeds Telegram's caption limit
+                if (translatedText.Length > TELEGRAM_CAPTION_LIMIT)
+                {
+                    _logger.Warning(
+                        "Translated caption exceeds {Limit} characters (length: {Length}), truncating to {MaxLength}.",
+                        TELEGRAM_CAPTION_LIMIT,
+                        translatedText.Length,
+                        TELEGRAM_CAPTION_LIMIT - TRUNCATION_SUFFIX.Length);
+                    var maxLength = TELEGRAM_CAPTION_LIMIT - TRUNCATION_SUFFIX.Length;
+                    translatedText = translatedText.Substring(0, maxLength) + TRUNCATION_SUFFIX;
+                }
+
+                return translatedText;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to translate caption, using original English text.");
+                return originalText;
             }
         }
     }

@@ -12,36 +12,39 @@ namespace TelegramNasaBot.Services
 {
     public class Publisher : IPublisher
     {
-        private readonly TelegramSettings _telegramSettings;
         private readonly ITelegramBotClient _botClient;
+        private readonly TelegramSettings _settings;
         private readonly ILogger _logger;
 
-        public Publisher(IOptions<TelegramSettings> telegramSettings, ITelegramBotClient botClient, ILogger logger)
+        public Publisher(
+            ITelegramBotClient botClient,
+            IOptions<TelegramSettings> settings,
+            ILogger logger)
         {
-            _telegramSettings = telegramSettings.Value;
             _botClient = botClient;
+            _settings = settings.Value;
             _logger = logger;
         }
 
         public async Task PublishPhotoAsync(byte[] imageData, string caption)
         {
+            _logger.Information("Publishing photo to Telegram channel {ChannelId}.", _settings.ChannelId);
+
             try
             {
-                _logger.Information("Publishing photo to Telegram channel: {ChannelId}", _telegramSettings.ChannelId);
-
                 using var stream = new MemoryStream(imageData);
-                var file = new InputFileStream(stream, "nasa-photo.jpg");
+                var file = new InputFileStream(stream, "photo.jpg");
 
                 await _botClient.SendPhoto(
-                    chatId: _telegramSettings.ChannelId,
+                    chatId: _settings.ChannelId,
                     photo: file,
                     caption: caption);
 
-                _logger.Information("Photo published successfully to {ChannelId}", _telegramSettings.ChannelId);
+                _logger.Information("Photo published successfully.");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error publishing photo to Telegram.");
+                _logger.Error(ex, "Failed to publish photo to Telegram.");
                 throw;
             }
         }
