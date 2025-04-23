@@ -2,12 +2,8 @@
 using QRCoder;
 using Serilog;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 using TelegramNasaBot.Interfaces;
 using TelegramNasaBot.Models;
 
@@ -17,16 +13,28 @@ namespace TelegramNasaBot.Services
     {
         private readonly TelegramSettings _telegramSettings;
         private readonly ILogger _logger;
-        private const int MaxDimension = 4000; // Safe max dimension for Telegram
 
         public QrCodeGenerator(IOptions<TelegramSettings> telegramSettings, ILogger logger)
         {
-            _telegramSettings = telegramSettings.Value;
-            _logger = logger;
+            _telegramSettings = telegramSettings.Value ?? throw new ArgumentNullException(nameof(telegramSettings));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            // Validate QrCodeMaxSizePercentage
+            if (_telegramSettings.QrCodeMaxSizePercentage < 5.0 || _telegramSettings.QrCodeMaxSizePercentage > 50.0)
+            {
+                _logger.Warning("QrCodeMaxSizePercentage {Percentage}% is out of valid range (5-50%). Using default 20%.",
+                    _telegramSettings.QrCodeMaxSizePercentage);
+                _telegramSettings.QrCodeMaxSizePercentage = 20.0;
+            }
         }
 
         public async Task<byte[]> AddQrCodeToImageAsync(byte[] imageData, string channelLink)
         {
+            if (imageData == null || imageData.Length == 0)
+                throw new ArgumentException("Image data cannot be null or empty.", nameof(imageData));
+            if (string.IsNullOrWhiteSpace(channelLink))
+                throw new ArgumentException("Channel link cannot be null or empty.", nameof(channelLink));
+
             try
             {
                 // Step 1: Generate QR code
@@ -57,7 +65,7 @@ namespace TelegramNasaBot.Services
             using var qrGenerator = new QRCodeGenerator();
             var qrCodeData = qrGenerator.CreateQrCode(channelLink, QRCodeGenerator.ECCLevel.Q);
             using var qrCode = new PngByteQRCode(qrCodeData);
-            var qrCodeBytes = qrCode.GetGraphic(20); // 20 pixels per module
+            var qrCodeBytes = qrCode.GetGraphic(_telegramSettings.QrCodeModuleSize);
 
             _logger.Information("QR code generated, size: {Size} bytes", qrCodeBytes.Length);
             return qrCodeBytes;
@@ -67,13 +75,13 @@ namespace TelegramNasaBot.Services
         {
             _logger.Information("Original image dimensions: {Width}x{Height}", image.Width, image.Height);
 
-            if (image.Width > MaxDimension || image.Height > MaxDimension)
+            if (image.Width > _telegramSettings.MaxImageDimension || image.Height > _telegramSettings.MaxImageDimension)
             {
-                _logger.Information("Resizing image to fit within {MaxDimension}x{MaxDimension}", MaxDimension, MaxDimension);
+                _logger.Information("Resizing image to fit within {MaxDimension}x{MaxDimension}", _telegramSettings.MaxImageDimension);
                 image.Mutate(x => x.Resize(new ResizeOptions
                 {
                     Mode = ResizeMode.Max,
-                    Size = new Size(MaxDimension, MaxDimension)
+                    Size = new Size(_telegramSettings.MaxImageDimension, _telegramSettings.MaxImageDimension)
                 }));
                 _logger.Information("Resized image dimensions: {Width}x{Height}", image.Width, image.Height);
             }
@@ -81,16 +89,20 @@ namespace TelegramNasaBot.Services
 
         private void OverlayQrCode(Image<Rgba32> image, Image<Rgba32> qrImage)
         {
-            // Resize QR code to 1/4 of the image's smaller dimension
-            var qrSize = Math.Min(image.Width, image.Height) / 4;
+            // Calculate QR code size based on percentage of the smaller dimension
+            var smallerDimension = Math.Min(image.Width, image.Height);
+            var qrSize = (int)(smallerDimension * (_telegramSettings.QrCodeMaxSizePercentage / 100.0));
+
+            // Ensure QR code is at least readable (optional minimum size)
+            qrSize = Math.Max(qrSize, 50); // Minimum 50 pixels for readability
             qrImage.Mutate(x => x.Resize(qrSize, qrSize));
 
             // Calculate position (bottom-right corner with padding)
-            var padding = 20;
-            var x = image.Width - qrImage.Width - padding;
-            var y = image.Height - qrImage.Height - padding;
+            var x = image.Width - qrImage.Width - _telegramSettings.QrCodePadding;
+            var y = image.Height - qrImage.Height - _telegramSettings.QrCodePadding;
 
-            _logger.Information("Overlaying QR code at position ({X}, {Y})", x, y);
+            _logger.Information("Overlaying QR code at position ({X}, {Y}) with size {Size}px (based on {Percentage}%)",
+                x, y, qrSize, _telegramSettings.QrCodeMaxSizePercentage);
 
             // Add a white background for QR code readability
             using var background = new Image<Rgba32>(qrImage.Width + 10, qrImage.Height + 10);
